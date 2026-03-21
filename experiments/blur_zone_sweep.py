@@ -1,5 +1,6 @@
+print("RUNNING NEW BLUR SWEEP FILE")
+
 import csv
-import math
 import os
 
 import numpy as np
@@ -12,9 +13,6 @@ OUT_DIR = "data/logs"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 
-# ================================
-# CLASSIFICATION (FIXED + TUNED)
-# ================================
 def classify_run(history):
     min_eff = min(row["effective_energy"] for row in history)
     final_eff = history[-1]["effective_energy"]
@@ -22,11 +20,9 @@ def classify_run(history):
     final_gv = history[-1]["gv"]
     max_entropy = max(row["entropy"] for row in history)
 
-    # Collapse
     if final_eff < 0.0005 or min_gv < 0.12:
         return "collapse", min_eff, final_eff, min_gv, final_gv, max_entropy
 
-    # Partial / blur zone (more sensitive)
     if (
         0.12 <= min_gv < 0.75
         or 0.45 <= final_gv < 0.90
@@ -34,20 +30,15 @@ def classify_run(history):
     ):
         return "partial", min_eff, final_eff, min_gv, final_gv, max_entropy
 
-    # Damped
     return "damped", min_eff, final_eff, min_gv, final_gv, max_entropy
 
 
-# ================================
-# SCHEDULES
-# ================================
 def ramp_schedule_factory(multiplier=2.5, warmup_steps=120, base_amp=0.10):
     def schedule(i, t):
         if i < warmup_steps:
             frac = i / max(1, warmup_steps)
             return base_amp * (1.0 + (multiplier - 1.0) * frac)
         return base_amp * multiplier
-
     return schedule
 
 
@@ -59,9 +50,6 @@ def moderate_injection(i, t):
     return 0.40
 
 
-# ================================
-# RUN ONE TRIAL
-# ================================
 def run_single_trial(beta, gamma, noise_std, ramp_steps, seed):
     sim = NoisyPressureSimulation(
         beta=beta,
@@ -93,9 +81,6 @@ def run_single_trial(beta, gamma, noise_std, ramp_steps, seed):
     }
 
 
-# ================================
-# AGGREGATE MULTIPLE RUNS
-# ================================
 def aggregate_trials(beta, gamma, noise_std, ramp_steps, seeds):
     outcomes = {"damped": 0, "partial": 0, "collapse": 0}
     exemplar = None
@@ -103,7 +88,6 @@ def aggregate_trials(beta, gamma, noise_std, ramp_steps, seeds):
     for seed in seeds:
         result = run_single_trial(beta, gamma, noise_std, ramp_steps, seed)
         outcomes[result["result"]] += 1
-
         if exemplar is None:
             exemplar = result["history"]
 
@@ -121,9 +105,6 @@ def aggregate_trials(beta, gamma, noise_std, ramp_steps, seeds):
     }
 
 
-# ================================
-# 🔥 IMPROVED HEATMAP
-# ================================
 def make_heatmap(rows, metric_key, title, filename):
     noise_vals = sorted(set(row["noise_std"] for row in rows))
     ramp_vals = sorted(set(row["ramp_steps"] for row in rows))
@@ -142,7 +123,6 @@ def make_heatmap(rows, metric_key, title, filename):
     z = np.array(z)
 
     plt.figure(figsize=(10, 6))
-
     im = plt.imshow(z, aspect="auto", origin="lower", vmin=0, vmax=1)
 
     plt.xticks(range(len(noise_vals)), [f"{v:.2f}" for v in noise_vals])
@@ -155,7 +135,6 @@ def make_heatmap(rows, metric_key, title, filename):
     cbar = plt.colorbar(im)
     cbar.set_label("Fraction")
 
-    # Annotate %
     for i in range(len(ramp_vals)):
         for j in range(len(noise_vals)):
             val = z[i, j]
@@ -178,25 +157,18 @@ def make_heatmap(rows, metric_key, title, filename):
     return path
 
 
-# ================================
-# MAIN SWEEP (TARGETED)
-# ================================
 def main():
     beta = 1.2
     gamma = 0.65
 
-    # 🔥 TARGETED BLUR ZONE RANGE
     noise_vals = [0.25, 0.28, 0.30, 0.31, 0.32, 0.35, 0.40]
     ramp_vals = [20, 30, 40, 50, 55, 60, 65, 80]
-
     seeds = list(range(10))
 
     summary_rows = []
 
     print("\nGV-CST BLUR-ZONE SWEEP\n")
-    print(
-        f"{'noise':>6} {'ramp':>6} {'damped%':>8} {'partial%':>9} {'collapse%':>10}"
-    )
+    print(f"{'noise':>6} {'ramp':>6} {'damped%':>8} {'partial%':>9} {'collapse%':>10}")
     print("-" * 70)
 
     for ramp_steps in ramp_vals:
@@ -217,7 +189,6 @@ def main():
                 f"{100*row['collapse_pct']:>9.1f}%"
             )
 
-    # Save CSV
     summary_csv = os.path.join(OUT_DIR, "blur_zone_summary.csv")
     with open(summary_csv, "w", newline="") as f:
         writer = csv.DictWriter(
@@ -242,7 +213,6 @@ def main():
                 }
             )
 
-    # Generate heatmaps
     partial_map = make_heatmap(
         summary_rows,
         "partial_pct",
