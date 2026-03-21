@@ -9,7 +9,6 @@ def laplacian_random(x, neighbors, rng):
         dx = rng.integers(-1, 2)
         dy = rng.integers(-1, 2)
 
-        # avoid zero-shift so a "neighbor" is actually a neighbor
         while dx == 0 and dy == 0:
             dx = rng.integers(-1, 2)
             dy = rng.integers(-1, 2)
@@ -57,20 +56,11 @@ def simulate(C, S, k, inj, size=64, steps=500, lam=0.08, seed=42):
     return survives
 
 
-def find_inj_min(C, S, k, size=64, steps=500, lam=0.08, seed=42):
+def find_inj_min(C, S, k):
     inj_vals = np.linspace(0.01, 2.0, 30)
 
-    for idx, inj in enumerate(inj_vals):
-        survives = simulate(
-            C=C,
-            S=S,
-            k=k,
-            inj=inj,
-            size=size,
-            steps=steps,
-            lam=lam,
-            seed=seed + idx,
-        )
+    for i, inj in enumerate(inj_vals):
+        survives = simulate(C, S, k, inj, seed=42 + i)
         if survives:
             return inj
 
@@ -90,15 +80,7 @@ def main():
         print(f"k = {k}")
         for C in C_vals:
             for S in S_vals:
-                inj_min = find_inj_min(
-                    C=C,
-                    S=S,
-                    k=k,
-                    size=64,
-                    steps=500,
-                    lam=0.08,
-                    seed=1000 + int(100 * C) + int(100 * S) + 10 * k,
-                )
+                inj_min = find_inj_min(C, S, k)
                 rows.append([C, S, k, inj_min])
                 print(f"  C={C:.2f}, S={S:.2f}, k={k} -> inj_min={inj_min:.4f}")
 
