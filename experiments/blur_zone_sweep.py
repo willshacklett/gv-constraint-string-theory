@@ -161,6 +161,8 @@ def make_heatmap(rows, metric_key, title, filename):
 
 
 def main():
+    print(">>> NEW MAIN IS RUNNING <<<")
+
     beta = 1.2
     gamma = 0.65
 
