@@ -12,7 +12,7 @@ print("NEW BLUR SWEEP FILE RUNNING")
 # Tunable model parameters
 # -----------------------------
 BETA = 1.2
-GAMMA = 0.40
+GAMMA = 0.15
 
 # Push wider/harder so we can actually find a boundary
 NOISE_VALS = [0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 0.90, 1.10]
