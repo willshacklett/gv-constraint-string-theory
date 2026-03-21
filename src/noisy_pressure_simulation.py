@@ -11,15 +11,10 @@ class NoisyPressureSimulation:
     Effective energy:
         E_eff = E_raw * C_noisy * GV
 
-    Where:
-        C_noisy = clamp(C_base + noise)
-
-    This lets us test whether GV still separates:
-    - stable
-    - damped
-    - collapse
-
-    under random perturbations in the constraint field.
+    Key change in this version:
+    - constraint can weaken past zero into a small negative region
+    - overflow pressure bites harder
+    - noise is amplified so the sweep can actually reach a blur/collapse zone
     """
 
     def __init__(
@@ -54,13 +49,23 @@ class NoisyPressureSimulation:
         if overflow == 0:
             c_base = 1.0
         else:
-            c_base = max(0.0, 1.0 - 0.35 * overflow)
+            # Stronger penalty than before, and allow real breakdown below zero.
+            c_base = max(-0.5, 1.0 - 0.5 * overflow)
 
         return c_base, overflow
 
     def noisy_constraint(self, c_base):
-        noise = self.rng.gauss(0.0, self.noise_std)
-        c_noisy = max(0.0, min(1.0, c_base + noise))
+        # Amplify noise so stressed runs can actually cross into failure.
+        noise = self.rng.gauss(0.0, self.noise_std * 1.8)
+
+        c_noisy = c_base + noise
+
+        # Allow constraint failure, not just weakening.
+        if c_noisy < -0.2:
+            c_noisy = -0.2
+        elif c_noisy > 1.2:
+            c_noisy = 1.2
+
         return c_noisy, noise
 
     def step(self, dt, amp, target_dim, injection):
