@@ -3,11 +3,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-print("NEW BLUR SWEEP FILE RUNNING")
+print("=== GV-CST NEW FILE LOADED v2 ===")
 
-# -----------------------------
-# Tunable model parameters
-# -----------------------------
 BETA = 1.5
 GAMMA = 0.10
 
@@ -15,11 +12,9 @@ NOISE_VALS = [0.25, 0.35, 0.50, 0.70, 0.90, 1.20]
 RAMP_VALS = [20, 50, 80, 120, 180, 250]
 SEEDS = list(range(10))
 
-# Simulation controls
 N_STEPS = 220
 DT = 0.08
 
-# Classification thresholds
 COLLAPSE_THRESHOLD = 2.0
 PARTIAL_THRESHOLD = 0.8
 SETTLE_THRESHOLD = 0.5
@@ -42,9 +37,6 @@ def ramp_force(step, ramp_steps):
     return smoothstep(step / float(ramp_steps))
 
 
-# -----------------------------
-# CORE SIMULATION
-# -----------------------------
 def simulate_run(noise_sigma, ramp_steps, seed):
     rng = np.random.default_rng(seed)
 
@@ -54,21 +46,19 @@ def simulate_run(noise_sigma, ramp_steps, seed):
     max_abs_x = abs(x)
     crossed_partial = False
     collapsed = False
-    collapse_step = None
 
     for step in range(N_STEPS):
         force = ramp_force(step, ramp_steps)
         noise = rng.normal(0.0, noise_sigma)
 
-        # 🔥 NEW BIFURCATING / UNSTABLE DYNAMICS
         nonlinear = x**3 - 0.5 * x
 
         a = (
-            (BETA * x) +
-            nonlinear -
-            (GAMMA * v) +
-            (3.5 * force) +
-            (1.5 * noise)
+            (BETA * x)
+            + nonlinear
+            - (GAMMA * v)
+            + (3.5 * force)
+            + (1.5 * noise)
         )
 
         v = v + DT * a
@@ -82,7 +72,6 @@ def simulate_run(noise_sigma, ramp_steps, seed):
 
         if ax >= COLLAPSE_THRESHOLD:
             collapsed = True
-            collapse_step = step
             break
 
     final_abs_x = abs(x)
@@ -105,9 +94,6 @@ def simulate_run(noise_sigma, ramp_steps, seed):
     }
 
 
-# -----------------------------
-# GRID SWEEP
-# -----------------------------
 def summarize_cell(noise, ramp, seeds):
     results = [simulate_run(noise, ramp, s) for s in seeds]
 
@@ -126,9 +112,6 @@ def summarize_cell(noise, ramp, seeds):
     }
 
 
-# -----------------------------
-# HEATMAP
-# -----------------------------
 def make_heatmap(rows, key, title, path):
     df = pd.DataFrame(rows)
     pivot = df.pivot(index="ramp", columns="noise", values=key)
@@ -159,11 +142,10 @@ def make_heatmap(rows, key, title, path):
     return path
 
 
-# -----------------------------
-# MAIN
-# -----------------------------
 def main():
-    print(">>> NEW MAIN IS RUNNING <<<")
+    print(">>> GV-CST NEW MAIN v2 <<<")
+    print("NOISE_VALS =", NOISE_VALS)
+    print("RAMP_VALS  =", RAMP_VALS)
 
     out_dir = ensure_output_dir()
     rows = []
@@ -180,33 +162,35 @@ def main():
                 f"{row['collapse_pct']*100:>5.1f}%"
             )
 
-    # Save CSV
     csv_path = os.path.join(out_dir, "blur_zone_summary.csv")
     pd.DataFrame(rows).to_csv(csv_path, index=False)
 
-    # Heatmaps
     partial_map = make_heatmap(
-        rows, "partial_pct",
-        "GV-CST | Partial (Blur Zone)",
-        os.path.join(out_dir, "blur_zone_partial_heatmap.png")
+        rows,
+        "partial_pct",
+        "GV-CST | Partial (Blur Zone) v2",
+        os.path.join(out_dir, "blur_zone_partial_heatmap.png"),
     )
 
     collapse_map = make_heatmap(
-        rows, "collapse_pct",
-        "GV-CST | Collapse",
-        os.path.join(out_dir, "blur_zone_collapse_heatmap.png")
+        rows,
+        "collapse_pct",
+        "GV-CST | Collapse v2",
+        os.path.join(out_dir, "blur_zone_collapse_heatmap.png"),
     )
 
     damped_map = make_heatmap(
-        rows, "damped_pct",
-        "GV-CST | Damped",
-        os.path.join(out_dir, "blur_zone_damped_heatmap.png")
+        rows,
+        "damped_pct",
+        "GV-CST | Damped v2",
+        os.path.join(out_dir, "blur_zone_damped_heatmap.png"),
     )
 
     amp_map = make_heatmap(
-        rows, "avg_max_abs_x",
-        "GV-CST | Max Amplitude",
-        os.path.join(out_dir, "blur_zone_maxamp_heatmap.png")
+        rows,
+        "avg_max_abs_x",
+        "GV-CST | Max Amplitude v2",
+        os.path.join(out_dir, "blur_zone_maxamp_heatmap.png"),
     )
 
     print("\nSaved:", csv_path)
