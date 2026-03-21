@@ -1,5 +1,6 @@
 import numpy as np
 import csv
+import os
 
 
 def laplacian_random(x, neighbors, rng):
@@ -9,6 +10,7 @@ def laplacian_random(x, neighbors, rng):
         dx = rng.integers(-1, 2)
         dy = rng.integers(-1, 2)
 
+        # avoid zero shift
         while dx == 0 and dy == 0:
             dx = rng.integers(-1, 2)
             dy = rng.integers(-1, 2)
@@ -60,14 +62,14 @@ def find_inj_min(C, S, k):
     inj_vals = np.linspace(0.01, 2.0, 30)
 
     for i, inj in enumerate(inj_vals):
-        survives = simulate(C, S, k, inj, seed=42 + i)
-        if survives:
+        if simulate(C, S, k, inj, seed=42 + i):
             return inj
 
     return np.nan
 
 
 def main():
+    # Parameter grids
     C_vals = np.linspace(0.2, 2.0, 10)
     S_vals = np.linspace(0.0, 2.0, 8)
     k_vals = [2, 4, 6, 8, 10]
@@ -77,19 +79,23 @@ def main():
     print("Running phase surface sweep...\n")
 
     for k in k_vals:
-        print(f"k = {k}")
+        print(f"\nk = {k}")
         for C in C_vals:
             for S in S_vals:
                 inj_min = find_inj_min(C, S, k)
                 rows.append([C, S, k, inj_min])
+
                 print(f"  C={C:.2f}, S={S:.2f}, k={k} -> inj_min={inj_min:.4f}")
 
-    with open("gv_phase_surface.csv", "w", newline="") as f:
+    # 🔥 GUARANTEED SAVE LOCATION (repo root)
+    output_path = os.path.join(os.getcwd(), "gv_phase_surface.csv")
+
+    with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["C", "S", "k", "inj_min"])
         writer.writerows(rows)
 
-    print("\nSaved: gv_phase_surface.csv")
+    print(f"\nSaved CSV to: {output_path}")
 
 
 if __name__ == "__main__":
