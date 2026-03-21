@@ -1,248 +1,262 @@
-import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-print("NEW BLUR SWEEP FILE RUNNING")
-
-import csv
-
+import math
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
-from src.noisy_pressure_simulation import NoisyPressureSimulation
+
+print("NEW BLUR SWEEP FILE RUNNING")
 
 
-OUT_DIR = "data/logs"
-os.makedirs(OUT_DIR, exist_ok=True)
+# -----------------------------
+# Tunable model parameters
+# -----------------------------
+BETA = 1.2
+GAMMA = 0.40
+
+# Push wider/harder so we can actually find a boundary
+NOISE_VALS = [0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75, 0.90, 1.10]
+RAMP_VALS = [20, 40, 60, 80, 100, 150, 200, 300]
+SEEDS = list(range(10))
+
+# Simulation controls
+N_STEPS = 220
+DT = 0.08
+
+# Classification thresholds
+COLLAPSE_THRESHOLD = 4.0       # hard fail if |x| blows past this
+PARTIAL_THRESHOLD = 1.25       # "blur zone" if |x| gets above this but recovers
+SETTLE_THRESHOLD = 0.60        # if final |x| is below this, call it damped
 
 
-def classify_run(history):
-    min_eff = min(row["effective_energy"] for row in history)
-    final_eff = history[-1]["effective_energy"]
-    min_gv = min(row["gv"] for row in history)
-    final_gv = history[-1]["gv"]
-    max_entropy = max(row["entropy"] for row in history)
-
-    if final_eff < 0.0005 or min_gv < 0.12:
-        return "collapse", min_eff, final_eff, min_gv, final_gv, max_entropy
-
-    if (
-        0.12 <= min_gv < 0.75
-        or 0.45 <= final_gv < 0.90
-        or max_entropy > 1.8
-    ):
-        return "partial", min_eff, final_eff, min_gv, final_gv, max_entropy
-
-    return "damped", min_eff, final_eff, min_gv, final_gv, max_entropy
+def ensure_output_dir() -> str:
+    out_dir = os.path.join("data", "logs")
+    os.makedirs(out_dir, exist_ok=True)
+    return out_dir
 
 
-def ramp_schedule_factory(multiplier=2.5, warmup_steps=120, base_amp=0.10):
-    def schedule(i, t):
-        if i < warmup_steps:
-            frac = i / max(1, warmup_steps)
-            return base_amp * (1.0 + (multiplier - 1.0) * frac)
-        return base_amp * multiplier
-    return schedule
+def smoothstep(z: float) -> float:
+    """
+    Smooth ramp from 0 to 1 as z goes from 0 to 1.
+    """
+    z = max(0.0, min(1.0, z))
+    return z * z * (3.0 - 2.0 * z)
 
 
-def no_overflow_dim_schedule(i, t):
-    return 11
+def ramp_force(step: int, ramp_steps: int) -> float:
+    """
+    External forcing ramps from 0 to 1 over ramp_steps.
+    """
+    if ramp_steps <= 0:
+        return 1.0
+    return smoothstep(step / float(ramp_steps))
 
 
-def moderate_injection(i, t):
-    return 0.40
+def simulate_run(noise_sigma: float, ramp_steps: int, seed: int) -> dict:
+    """
+    Nonlinear driven/damped system with stochastic forcing.
 
+    x'' + gamma*x' - beta*x + x^3 = forcing + noise
 
-def run_single_trial(beta, gamma, noise_std, ramp_steps, seed):
-    sim = NoisyPressureSimulation(
-        beta=beta,
-        gamma=gamma,
-        dim_limit=11,
-        base_amp=0.10,
-        freq=1.0,
-        entropy_drag=0.08,
-        noise_std=noise_std,
-        seed=seed,
-    )
+    Interpretation:
+    - damping gamma tries to stabilize
+    - negative linear term with cubic restores/creates bistable-like behavior
+    - forcing ramps the system toward instability
+    - noise can kick it across thresholds
+    """
+    rng = np.random.default_rng(seed)
 
-    history = sim.run(
-        steps=300,
-        dt=0.05,
-        amp_schedule=ramp_schedule_factory(multiplier=2.5, warmup_steps=ramp_steps),
-        dim_schedule=no_overflow_dim_schedule,
-        injection_schedule=moderate_injection,
-    )
+    x = 0.05
+    v = 0.0
 
-    label, min_eff, final_eff, min_gv, final_gv, max_entropy = classify_run(history)
+    max_abs_x = abs(x)
+    crossed_partial = False
+    collapsed = False
+    collapse_step = None
+
+    series_x = []
+    series_v = []
+
+    for step in range(N_STEPS):
+        force = ramp_force(step, ramp_steps)
+        noise = rng.normal(0.0, noise_sigma)
+
+        # Dynamics
+        # x'' = beta*x - x^3 - gamma*v + force + noise
+        a = (BETA * x) - (x ** 3) - (GAMMA * v) + force + noise
+
+        v = v + DT * a
+        x = x + DT * v
+
+        ax = abs(x)
+        max_abs_x = max(max_abs_x, ax)
+
+        if ax >= PARTIAL_THRESHOLD:
+            crossed_partial = True
+
+        if ax >= COLLAPSE_THRESHOLD:
+            collapsed = True
+            collapse_step = step
+            series_x.append(x)
+            series_v.append(v)
+            break
+
+        series_x.append(x)
+        series_v.append(v)
+
+    final_abs_x = abs(x)
+
+    if collapsed:
+        label = "collapse"
+    elif crossed_partial:
+        # It crossed into the blur zone but did not fully blow up.
+        label = "partial"
+    elif final_abs_x <= SETTLE_THRESHOLD:
+        label = "damped"
+    else:
+        # fallback bucket if it neither settled tightly nor crossed partial
+        label = "partial"
 
     return {
-        "result": label,
-        "min_gv": min_gv,
-        "final_gv": final_gv,
-        "max_entropy": max_entropy,
-        "history": history,
+        "noise": noise_sigma,
+        "ramp": ramp_steps,
+        "seed": seed,
+        "label": label,
+        "max_abs_x": float(max_abs_x),
+        "final_abs_x": float(final_abs_x),
+        "collapse_step": collapse_step if collapse_step is not None else -1,
+        "steps_completed": len(series_x),
     }
 
 
-def aggregate_trials(beta, gamma, noise_std, ramp_steps, seeds):
-    outcomes = {"damped": 0, "partial": 0, "collapse": 0}
-    exemplar = None
+def summarize_cell(noise_sigma: float, ramp_steps: int, seeds: list[int]) -> dict:
+    results = [simulate_run(noise_sigma, ramp_steps, seed) for seed in seeds]
 
-    for seed in seeds:
-        result = run_single_trial(beta, gamma, noise_std, ramp_steps, seed)
-        outcomes[result["result"]] += 1
-        if exemplar is None:
-            exemplar = result["history"]
-
-    n = len(seeds)
+    total = len(results)
+    damped_n = sum(1 for r in results if r["label"] == "damped")
+    partial_n = sum(1 for r in results if r["label"] == "partial")
+    collapse_n = sum(1 for r in results if r["label"] == "collapse")
 
     return {
-        "beta": beta,
-        "gamma": gamma,
-        "noise_std": noise_std,
-        "ramp_steps": ramp_steps,
-        "damped_pct": outcomes["damped"] / n,
-        "partial_pct": outcomes["partial"] / n,
-        "collapse_pct": outcomes["collapse"] / n,
-        "history": exemplar,
+        "noise": noise_sigma,
+        "ramp": ramp_steps,
+        "damped_n": damped_n,
+        "partial_n": partial_n,
+        "collapse_n": collapse_n,
+        "damped_pct": damped_n / total,
+        "partial_pct": partial_n / total,
+        "collapse_pct": collapse_n / total,
+        "avg_max_abs_x": float(np.mean([r["max_abs_x"] for r in results])),
+        "avg_final_abs_x": float(np.mean([r["final_abs_x"] for r in results])),
     }
 
 
-def make_heatmap(rows, metric_key, title, filename):
-    noise_vals = sorted(set(row["noise_std"] for row in rows))
-    ramp_vals = sorted(set(row["ramp_steps"] for row in rows))
+def make_heatmap(summary_rows: list[dict], value_col: str, title: str, out_path: str) -> str:
+    df = pd.DataFrame(summary_rows)
 
-    z = []
-    for ramp in ramp_vals:
-        z_row = []
-        for noise in noise_vals:
-            match = next(
-                r for r in rows
-                if abs(r["noise_std"] - noise) < 1e-6 and r["ramp_steps"] == ramp
-            )
-            z_row.append(match[metric_key])
-        z.append(z_row)
+    pivot = df.pivot(index="ramp", columns="noise", values=value_col)
+    pivot = pivot.sort_index().sort_index(axis=1)
 
-    z = np.array(z)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    im = ax.imshow(
+        pivot.values,
+        aspect="auto",
+        origin="lower",
+        interpolation="nearest",
+    )
 
-    plt.figure(figsize=(10, 6))
-    im = plt.imshow(z, aspect="auto", origin="lower", vmin=0, vmax=1)
+    ax.set_title(title)
+    ax.set_xlabel("Noise σ")
+    ax.set_ylabel("Ramp steps (ΔC rate)")
 
-    plt.xticks(range(len(noise_vals)), [f"{v:.2f}" for v in noise_vals])
-    plt.yticks(range(len(ramp_vals)), [str(v) for v in ramp_vals])
+    ax.set_xticks(np.arange(len(pivot.columns)))
+    ax.set_xticklabels([f"{c:.2f}" for c in pivot.columns])
 
-    plt.xlabel("Noise σ")
-    plt.ylabel("Ramp steps (ΔC rate)")
-    plt.title(title)
+    ax.set_yticks(np.arange(len(pivot.index)))
+    ax.set_yticklabels([str(i) for i in pivot.index])
 
-    cbar = plt.colorbar(im)
+    for i in range(pivot.shape[0]):
+        for j in range(pivot.shape[1]):
+            val = pivot.values[i, j]
+            txt = f"{val * 100:.0f}%"
+            ax.text(j, i, txt, ha="center", va="center", color="white", fontsize=8)
+
+    cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Fraction")
 
-    for i in range(len(ramp_vals)):
-        for j in range(len(noise_vals)):
-            val = z[i, j]
-            plt.text(
-                j,
-                i,
-                f"{val*100:.0f}%",
-                ha="center",
-                va="center",
-                fontsize=8,
-                color="white" if val > 0.5 else "black",
-            )
-
     plt.tight_layout()
+    plt.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
 
-    path = os.path.join(OUT_DIR, filename)
-    plt.savefig(path, dpi=180)
-    plt.close()
 
-    return path
+def print_summary_table(summary_rows: list[dict]) -> None:
+    print("\nGV-CST BLUR-ZONE SWEEP\n")
+    print(f"{'noise':<8}{'ramp':<8}{'damped%':<12}{'partial%':<12}{'collapse%':<12}")
+    print("-" * 52)
+
+    for row in summary_rows:
+        print(
+            f"{row['noise']:<8.2f}"
+            f"{row['ramp']:<8}"
+            f"{row['damped_pct'] * 100:<12.1f}"
+            f"{row['partial_pct'] * 100:<12.1f}"
+            f"{row['collapse_pct'] * 100:<12.1f}"
+        )
 
 
 def main():
     print(">>> NEW MAIN IS RUNNING <<<")
 
-    beta = 1.2
-    gamma = 0.4
-
-    noise_vals = [0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75]
-    ramp_vals = [20, 40, 60, 80, 100, 150, 200]
-    seeds = list(range(10))
-
+    out_dir = ensure_output_dir()
     summary_rows = []
 
-    print("\nGV-CST BLUR-ZONE SWEEP\n")
-    print(f"{'noise':>6} {'ramp':>6} {'damped%':>8} {'partial%':>9} {'collapse%':>10}")
-    print("-" * 70)
-
-    for ramp_steps in ramp_vals:
-        for noise_std in noise_vals:
-            row = aggregate_trials(
-                beta=beta,
-                gamma=gamma,
-                noise_std=noise_std,
-                ramp_steps=ramp_steps,
-                seeds=seeds,
-            )
+    for ramp in RAMP_VALS:
+        for noise in NOISE_VALS:
+            row = summarize_cell(noise, ramp, SEEDS)
             summary_rows.append(row)
 
-            print(
-                f"{noise_std:>6.2f} {ramp_steps:>6} "
-                f"{100*row['damped_pct']:>7.1f}% "
-                f"{100*row['partial_pct']:>8.1f}% "
-                f"{100*row['collapse_pct']:>9.1f}%"
-            )
+    # Sort nicely for console output and CSV
+    summary_rows.sort(key=lambda r: (r["ramp"], r["noise"]))
 
-    summary_csv = os.path.join(OUT_DIR, "blur_zone_summary.csv")
-    with open(summary_csv, "w", newline="") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "noise_std",
-                "ramp_steps",
-                "damped_pct",
-                "partial_pct",
-                "collapse_pct",
-            ],
-        )
-        writer.writeheader()
-        for row in summary_rows:
-            writer.writerow(
-                {
-                    "noise_std": row["noise_std"],
-                    "ramp_steps": row["ramp_steps"],
-                    "damped_pct": row["damped_pct"],
-                    "partial_pct": row["partial_pct"],
-                    "collapse_pct": row["collapse_pct"],
-                }
-            )
+    print_summary_table(summary_rows)
+
+    summary_csv = os.path.join(out_dir, "blur_zone_summary.csv")
+    pd.DataFrame(summary_rows).to_csv(summary_csv, index=False)
 
     partial_map = make_heatmap(
         summary_rows,
         "partial_pct",
         "GV-CST blur zone | partial-collapse fraction",
-        "blur_zone_partial_heatmap.png",
+        os.path.join(out_dir, "blur_zone_partial_heatmap.png"),
     )
 
     collapse_map = make_heatmap(
         summary_rows,
         "collapse_pct",
         "GV-CST blur zone | collapse fraction",
-        "blur_zone_collapse_heatmap.png",
+        os.path.join(out_dir, "blur_zone_collapse_heatmap.png"),
     )
 
     damped_map = make_heatmap(
         summary_rows,
         "damped_pct",
         "GV-CST blur zone | damped fraction",
-        "blur_zone_damped_heatmap.png",
+        os.path.join(out_dir, "blur_zone_damped_heatmap.png"),
+    )
+
+    max_amp_map = make_heatmap(
+        summary_rows,
+        "avg_max_abs_x",
+        "GV-CST blur zone | average max |x|",
+        os.path.join(out_dir, "blur_zone_maxamp_heatmap.png"),
     )
 
     print("\nSaved summary:", summary_csv)
     print("Saved partial heatmap:", partial_map)
     print("Saved collapse heatmap:", collapse_map)
     print("Saved damped heatmap:", damped_map)
+    print("Saved max amplitude heatmap:", max_amp_map)
 
 
 if __name__ == "__main__":
