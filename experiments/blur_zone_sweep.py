@@ -164,10 +164,10 @@ def main():
     print(">>> NEW MAIN IS RUNNING <<<")
 
     beta = 1.2
-    gamma = 0.65
+    gamma = 0.4
 
-    noise_vals = [0.25, 0.28, 0.30, 0.31, 0.32, 0.35, 0.40]
-    ramp_vals = [20, 30, 40, 50, 55, 60, 65, 80]
+    noise_vals = [0.25, 0.30, 0.35, 0.40, 0.50, 0.60, 0.75]
+    ramp_vals = [20, 40, 60, 80, 100, 150, 200]
     seeds = list(range(10))
 
     summary_rows = []
