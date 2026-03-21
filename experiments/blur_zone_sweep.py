@@ -83,7 +83,7 @@ def simulate_run(noise_sigma: float, ramp_steps: int, seed: int) -> dict:
 
         # Dynamics
         # x'' = beta*x - x^3 - gamma*v + force + noise
-        a = (BETA * x) - (x ** 3) - (GAMMA * v) + force + noise
+        a = (BETA * x) - (0.2 * x ** 3) - (GAMMA * v) + (2.5 * force) + noise
 
         v = v + DT * a
         x = x + DT * v
