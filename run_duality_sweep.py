@@ -1,5 +1,6 @@
 import numpy as np
 
+<<<<<<< HEAD
 # Locked fit parameters from your confirmed runs
 b_k = 0.2776
 b_lambda = 2.1204
@@ -69,3 +70,43 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+# Locked values from your runs
+b_k = 0.2776
+b_lambda = 2.1204
+
+def compute(bk, bl):
+    k_c = 1.0 / bk
+    lambda_c = 1.0 / bl
+    return k_c, lambda_c, k_c * lambda_c
+
+print("\n=== DUALITY SWEEP ===\n")
+
+# Baseline
+k_c, lambda_c, prod = compute(b_k, b_lambda)
+print(f"baseline  | k_c={k_c:.4f} | lambda_c={lambda_c:.4f} | product={prod:.4f}")
+
+# Perturbations
+deltas = [-0.05, -0.02, 0.00, 0.02, 0.05]
+products = []
+
+for i, d in enumerate(deltas):
+    bk = b_k * (1 + d)
+    bl = b_lambda * (1 + d)
+    k_c, lambda_c, prod = compute(bk, bl)
+    products.append(prod)
+    print(f"perturb_{i} | k_c={k_c:.4f} | lambda_c={lambda_c:.4f} | product={prod:.4f}")
+
+products = np.array(products)
+
+print("\n--- Stats ---")
+print(f"mean = {products.mean():.4f}")
+print(f"std  = {products.std():.4f}")
+print(f"min  = {products.min():.4f}")
+print(f"max  = {products.max():.4f}")
+
+print("\nInterpretation:")
+print("If product stays ~constant => duality is invariant")
+
+print("\nDone.\n")
+>>>>>>> d451b2f (lock gv-cst propagation law + duality + residual + validation)

@@ -2,9 +2,6 @@ import numpy as np
 import csv
 from scipy.optimize import curve_fit
 
-# -------------------------
-# Load data
-# -------------------------
 lambdas = []
 influences = []
 
@@ -17,15 +14,9 @@ with open("lambda_influence.csv", "r") as f:
 lambdas = np.array(lambdas)
 influences = np.array(influences)
 
-# -------------------------
-# Exponential model (finite-depth kernel)
-# -------------------------
 def model(l, a, b):
     return a * np.exp(b * l)
 
-# -------------------------
-# Fit
-# -------------------------
 params, _ = curve_fit(model, lambdas, influences, p0=[1.0, 2.0])
 
 a, b = params
@@ -34,9 +25,6 @@ print("\n=== EXPONENTIAL FIT ===")
 print(f"a ≈ {a:.4f}")
 print(f"b ≈ {b:.4f}")
 
-# -------------------------
-# Error
-# -------------------------
 pred = model(lambdas, a, b)
 rmse = np.sqrt(np.mean((pred - influences) ** 2))
 
