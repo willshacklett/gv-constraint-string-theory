@@ -222,3 +222,54 @@ k_c \cdot \lambda_c = 1.70 + \epsilon(C,S,\lambda)
 ---
 
 ## Repo Structure
+ src/
+fit_lambda_curve.py
+extract_lambda_c.py
+run_lambda_k_duality.py
+run_duality_sweep.py
+run_residual_analysis.py
+fit_residual_curve.py
+run_universal_collapse.py
+run_cross_regime_validation.py
+
+data/
+lambda_influence.csv
+lambda_c_results.csv
+
+
+---
+
+## Status
+
+- Duality: locked  
+- Residual: extracted  
+- Closure: validated  
+- Universality: confirmed  
+
+---
+
+## Next Steps
+
+- Extract ε(C,S) hypersurface
+- Fit exponential correction:
+  \[
+  \epsilon \sim \alpha e^{-\beta \lambda}
+  \]
+- Validate RG-style flattening
+- Extend to spatial / lattice systems
+
+---
+
+## Philosophy
+
+GV-CST treats reality as:
+
+> Constraint-regulated propagation across finite depth
+
+Not static structure.
+
+---
+
+## License
+
+MIT
