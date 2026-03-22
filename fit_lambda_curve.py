@@ -18,7 +18,7 @@ lambdas = np.array(lambdas)
 influences = np.array(influences)
 
 # -------------------------
-# Exponential model (CORRECT)
+# Exponential model (finite-depth kernel)
 # -------------------------
 def model(l, a, b):
     return a * np.exp(b * l)
