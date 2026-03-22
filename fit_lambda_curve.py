@@ -2,7 +2,9 @@ import numpy as np
 import csv
 from scipy.optimize import curve_fit
 
-# load data
+# -------------------------
+# Load data
+# -------------------------
 lambdas = []
 influences = []
 
@@ -15,19 +17,27 @@ with open("lambda_influence.csv", "r") as f:
 lambdas = np.array(lambdas)
 influences = np.array(influences)
 
-# model: divergence-style (rational)
-def model(l, a, lc):
-    return a / (1 - l / lc)
+# -------------------------
+# Model: Exponential (stable)
+# -------------------------
+def model(l, a, b):
+    return a * np.exp(b * l)
 
-params, _ = curve_fit(model, lambdas, influences, p0=[1.0, 0.3])
+# -------------------------
+# Fit
+# -------------------------
+params, _ = curve_fit(model, lambdas, influences, p0=[1.0, 2.0])
 
-a, lc = params
+a, b = params
 
-print("\n=== LAMBDA FIT ===")
+print("\n=== EXPONENTIAL FIT ===")
 print(f"a ≈ {a:.4f}")
-print(f"lambda_c ≈ {lc:.4f}")
+print(f"b ≈ {b:.4f}")
 
-# compute simple error
-pred = model(lambdas, a, lc)
-rmse = np.sqrt(np.mean((pred - influences)**2))
+# -------------------------
+# Error
+# -------------------------
+pred = model(lambdas, a, b)
+rmse = np.sqrt(np.mean((pred - influences) ** 2))
+
 print(f"RMSE ≈ {rmse:.6f}")
