@@ -18,7 +18,7 @@ lambdas = np.array(lambdas)
 influences = np.array(influences)
 
 # -------------------------
-# Exponential model (correct one)
+# Exponential model (CORRECT)
 # -------------------------
 def model(l, a, b):
     return a * np.exp(b * l)
