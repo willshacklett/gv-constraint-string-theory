@@ -8,8 +8,6 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Allow running from repo root:
-#   python experiments/gv_equilibrium_sweep.py
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
@@ -30,14 +28,7 @@ def detect_plateau(
     gv_range_tol: float = 0.0025,
     slope_tol: float = 2.0e-5,
 ) -> Tuple[bool, float, int]:
-    """
-    Detect a practical plateau (quasi-equilibrium) in GV.
 
-    Returns:
-        plateau_found (bool)
-        plateau_gv (float)
-        plateau_step (int)
-    """
     if len(history) < window + 2:
         return False, history[-1]["gv"], history[-1]["step"]
 
@@ -67,19 +58,14 @@ def run_case(
     init_gv: float = 0.95,
     init_entropy: float = 0.02,
     beta: float = 1.2,
-    gamma: float = 0.65,
-    entropy_drag: float = 0.08,
+    gamma: float = 0.45,            # 🔧 lowered
+    entropy_drag: float = 0.12,     # 🔧 increased
     collapse_threshold: float = 0.35,
     collapse_rate: float = 2.5,
     collapse_floor: float = 0.0,
     collapse_entropy_drag: float = 0.20,
 ) -> Dict:
-    """
-    Run one constant-parameter case using the existing GVDynamics engine.
 
-    Since entropy accumulates in the current model, we interpret "equilibrium"
-    as a plateau / quasi-equilibrium if the trajectory settles into a narrow band.
-    """
     injection = inj_over_entropy * entropy_input
 
     model = GVDynamics(
@@ -172,6 +158,7 @@ def build_heatmap_matrix(
     ratios: List[float],
     value_key: str = "plateau_gv",
 ) -> np.ndarray:
+
     z = np.full((len(ratios), len(constraints)), np.nan, dtype=float)
 
     for r_idx, ratio in enumerate(ratios):
@@ -191,24 +178,15 @@ def build_heatmap_matrix(
     return z
 
 
-def save_heatmap(
-    matrix: np.ndarray,
-    constraints: List[float],
-    ratios: List[float],
-    path: str,
-    *,
-    title: str,
-    vmin: float = 0.0,
-    vmax: float = 1.0,
-) -> None:
+def save_heatmap(matrix, constraints, ratios, path, title):
     plt.figure(figsize=(10, 7))
     plt.imshow(
         matrix,
         aspect="auto",
         origin="lower",
         extent=[min(constraints), max(constraints), min(ratios), max(ratios)],
-        vmin=vmin,
-        vmax=vmax,
+        vmin=0.0,
+        vmax=1.0,
     )
     plt.colorbar(label="GV plateau")
     plt.xlabel("Constraint C")
@@ -219,92 +197,34 @@ def save_heatmap(
     plt.close()
 
 
-def save_collapse_heatmap(
-    rows: List[Dict],
-    constraints: List[float],
-    ratios: List[float],
-    path: str,
-) -> None:
-    z = np.full((len(ratios), len(constraints)), 0.0, dtype=float)
-
-    for r_idx, ratio in enumerate(ratios):
-        for c_idx, constraint in enumerate(constraints):
-            match = next(
-                (
-                    row
-                    for row in rows
-                    if abs(row["constraint"] - constraint) < 1e-12
-                    and abs(row["inj_over_entropy"] - ratio) < 1e-12
-                ),
-                None,
-            )
-            if match is not None:
-                z[r_idx, c_idx] = 1.0 if match["collapsed"] else 0.0
-
-    plt.figure(figsize=(10, 7))
-    plt.imshow(
-        z,
-        aspect="auto",
-        origin="lower",
-        extent=[min(constraints), max(constraints), min(ratios), max(ratios)],
-        vmin=0.0,
-        vmax=1.0,
-    )
-    plt.colorbar(label="Collapsed (1=yes, 0=no)")
-    plt.xlabel("Constraint C")
-    plt.ylabel("Injection / Entropy")
-    plt.title("GV collapse map")
-    plt.tight_layout()
-    plt.savefig(path, dpi=180)
-    plt.close()
-
-
 def print_summary(rows: List[Dict]) -> None:
-    stable_rows = [r for r in rows if not r["collapsed"]]
     plateau_rows = [r for r in rows if r["plateau_found"] and not r["collapsed"]]
 
     print("\nGV EQUILIBRIUM / PLATEAU SWEEP\n")
     print(f"Total cases:        {len(rows)}")
-    print(f"Non-collapsed:      {len(stable_rows)}")
     print(f"Plateaus detected:  {len(plateau_rows)}")
 
     if plateau_rows:
         top = sorted(plateau_rows, key=lambda r: r["plateau_gv"], reverse=True)[:10]
         print("\nTop plateau cases:")
-        print(
-            f"{'C':>6} {'inj/S':>8} {'GV*':>8} {'step':>8} "
-            f"{'final_gv':>10} {'max_S':>10}"
-        )
-        print("-" * 60)
+        print(f"{'C':>6} {'inj/S':>8} {'GV*':>8}")
+        print("-" * 30)
         for row in top:
             print(
                 f"{row['constraint']:>6.3f} "
                 f"{row['inj_over_entropy']:>8.3f} "
-                f"{row['plateau_gv']:>8.4f} "
-                f"{row['plateau_step']:>8d} "
-                f"{row['final_gv']:>10.4f} "
-                f"{row['max_entropy']:>10.4f}"
+                f"{row['plateau_gv']:>8.4f}"
             )
-
-    if stable_rows:
-        nearest = min(stable_rows, key=lambda r: abs(r["plateau_gv"] - 0.962))
-        print("\nNearest non-collapsed case to GV = 0.962:")
-        print(
-            f"  C={nearest['constraint']:.3f}, "
-            f"inj/S={nearest['inj_over_entropy']:.3f}, "
-            f"plateau_gv={nearest['plateau_gv']:.4f}, "
-            f"final_gv={nearest['final_gv']:.4f}, "
-            f"collapsed={nearest['collapsed']}"
-        )
 
 
 def main() -> None:
-    # Keep entropy_input fixed so we can test the ratio hypothesis cleanly:
-    # GV* ~ f(C, injection / entropy_input)
+
     entropy_input = 0.03
 
     constraints = np.round(np.linspace(0.05, 1.50, 20), 3).tolist()
-    ratios = np.round(np.linspace(0.20, 8.00, 24), 3).tolist()
+
+    # 🔥 FIXED RANGE
+    ratios = np.round(np.linspace(0.05, 2.5, 30), 3).tolist()
 
     rows: List[Dict] = []
 
@@ -314,53 +234,28 @@ def main() -> None:
                 constraint=constraint,
                 entropy_input=entropy_input,
                 inj_over_entropy=ratio,
-                steps=3000,
-                dt=0.01,
-                init_gv=0.95,
-                init_entropy=0.02,
-                beta=1.2,
-                gamma=0.65,
-                entropy_drag=0.08,
-                collapse_threshold=0.35,
-                collapse_rate=2.5,
-                collapse_floor=0.0,
-                collapse_entropy_drag=0.20,
             )
             rows.append(row)
 
     summary_csv = os.path.join(OUT_DIR, "gv_equilibrium_sweep.csv")
-    plateau_png = os.path.join(FIG_DIR, "gv_equilibrium_heatmap.png")
-    collapse_png = os.path.join(FIG_DIR, "gv_collapse_heatmap.png")
+    heatmap_png = os.path.join(FIG_DIR, "gv_equilibrium_heatmap.png")
 
     save_summary_csv(rows, summary_csv)
 
-    plateau_matrix = build_heatmap_matrix(
-        rows=rows,
-        constraints=constraints,
-        ratios=ratios,
-        value_key="plateau_gv",
-    )
-    save_heatmap(
-        matrix=plateau_matrix,
-        constraints=constraints,
-        ratios=ratios,
-        path=plateau_png,
-        title="GV plateau heatmap vs constraint and injection/entropy",
-        vmin=0.0,
-        vmax=1.0,
-    )
+    matrix = build_heatmap_matrix(rows, constraints, ratios)
 
-    save_collapse_heatmap(
-        rows=rows,
-        constraints=constraints,
-        ratios=ratios,
-        path=collapse_png,
+    save_heatmap(
+        matrix,
+        constraints,
+        ratios,
+        heatmap_png,
+        "GV equilibrium (desaturated regime)",
     )
 
     print_summary(rows)
-    print(f"\nSaved summary CSV: {summary_csv}")
-    print(f"Saved plateau heatmap: {plateau_png}")
-    print(f"Saved collapse heatmap: {collapse_png}")
+
+    print(f"\nSaved CSV: {summary_csv}")
+    print(f"Saved heatmap: {heatmap_png}")
 
 
 if __name__ == "__main__":
