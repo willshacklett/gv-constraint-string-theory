@@ -273,3 +273,15 @@ Not static structure.
 ## License
 
 MIT
+
+---
+
+## 🧠 Phase Basin Law
+
+> Timing is locked by topology, not dynamics.
+
+Systems evolve within discrete constraint-defined basins.  
+Transitions occur only when topology permits — not when forces demand.
+
+See: [docs/phase_basin_law.md](docs/phase_basin_law.md)
+
